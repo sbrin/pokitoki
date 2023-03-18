@@ -7,7 +7,8 @@ from bot import config
 
 openai.api_key = config.openai_api_key
 
-BASE_PROMPT = "Your primary goal is to answer my questions. This may involve writing code or providing helpful information. Be detailed and thorough in your responses."
+"""BASE_PROMPT = "Your primary goal is to answer my questions. This may involve writing code or providing helpful information. Be detailed and thorough in your responses." """
+BASE_PROMPT = ""
 
 PRE_RE = re.compile(r"&lt;(/?pre)")
 
@@ -19,7 +20,7 @@ class ChatGPT:
         try:
             messages = self._generate_messages(question, history)
             resp = await openai.ChatCompletion.acreate(
-                model="gpt-3.5-turbo",
+                model="gpt-4",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000,
