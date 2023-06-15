@@ -7,20 +7,16 @@ from bot import config
 
 openai.api_key = config.openai_api_key
 
-"""BASE_PROMPT = "Your primary goal is to answer my questions. This may involve writing code or providing helpful information. Be detailed and thorough in your responses." """
-BASE_PROMPT = ""
+BASE_PROMPT = "Your primary goal is to answer my questions. This may involve writing code or providing helpful information. Be detailed and thorough in your responses."
 
 PRE_RE = re.compile(r"&lt;(/?pre)")
 
-class ChatGPT:
-    """OpenAI API wrapper."""
-
-    async def ask(self, question: str, history: list[UserMessage]):
-        """Asks the language model a question and returns an answer."""
+Expand All
+	@@ -19,7 +20,7 @@ async def ask(self, question: str, history: list[UserMessage]):
         try:
             messages = self._generate_messages(question, history)
             resp = await openai.ChatCompletion.acreate(
-                model="gpt-4",
+                model="gpt-3.5-turbo",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1000,
