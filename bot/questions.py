@@ -1,20 +1,8 @@
-"""Working with questions in chat messages."""
+"""Extracts questions from chat messages."""
 
-import datetime as dt
-import logging
-from telegram import Message
-from telegram.ext import (
-    CallbackContext,
-)
-from bot.chatgpt import ChatGPT
-from bot.models import UserData
-
-logger = logging.getLogger(__name__)
-
-# We are using the latest and greatest OpenAI model.
-# There is also a previous generation (GPT-3)
-# available via davinci.DaVinci class, but who needs it?
-model = ChatGPT()
+from telegram import Message, MessageEntity
+from telegram.ext import CallbackContext
+from bot import shortcuts
 
 
 def extract_private(message: Message, context: CallbackContext) -> str:
@@ -37,16 +25,29 @@ def extract_group(message: Message, context: CallbackContext) -> tuple[str, Mess
         question = f"+ {message.text}"
         return question, message
 
-    elif not message.text.startswith(context.bot.name):
+    mention = (
+        message.entities[0]
+        if message.entities and message.entities[0].type == MessageEntity.MENTION
+        else None
+    )
+    if not mention:
         # the message is not a reply to the bot,
         # so ignore it unless it's mentioning the bot
         return "", message
 
+    mention_text = message.text[mention.offset : mention.offset + mention.length]
+    if mention_text.lower() != context.bot.name.lower():
+        # the message mentions someone else
+        return "", message
+
     # the message is mentioning the bot,
     # so remove the mention to get the question
-    question = message.text.removeprefix(context.bot.name).strip()
+    question = message.text[: mention.offset] + message.text[mention.offset + mention.length :]
+    question = question.strip()
 
-    if message.reply_to_message:
+    # messages in topics are technically replies to the 'topic created' message
+    # so we should ignore such replies
+    if message.reply_to_message and not message.reply_to_message.forum_topic_created:
         # the real question is in the original message
         question = (
             f"{question}: {message.reply_to_message.text}"
@@ -58,31 +59,28 @@ def extract_group(message: Message, context: CallbackContext) -> tuple[str, Mess
     return question, message
 
 
-def prepare(question: str, context: CallbackContext) -> tuple[str, list]:
-    """Returns the question along with the previous messages (for follow-up questions)."""
-    user = UserData(context.user_data)
-    history = []
+def prepare(question: str) -> tuple[str, bool]:
+    """
+    Returns the question without the special commands
+    and indicates whether it is a follow-up.
+    """
+
     if question[0] == "+":
-        # this is a follow-up question,
-        # so the bot should retain the previous history
         question = question.strip("+ ")
-        history = user.messages.as_list()
+        is_follow_up = True
     else:
-        # user is asking a question 'from scratch',
-        # so the bot should forget the previous history
-        user.messages.clear()
-    return question, history
+        is_follow_up = False
 
+    if question[0] == "!":
+        # this is a shortcut, so the bot should
+        # process the question before asking it
+        shortcut, question = shortcuts.extract(question)
+        question = shortcuts.apply(shortcut, question)
 
-async def ask(message: Message, context: CallbackContext, question: str) -> str:
-    """Answers a question using the OpenAI model."""
-    question = question or message.text
-    prep_question, history = prepare(question, context)
-    start = dt.datetime.now()
-    answer = await model.ask(prep_question, history)
-    elapsed = int((dt.datetime.now() - start).total_seconds() * 1000)
-    logger.info(
-        f"question from user={message.from_user.username}, "
-        f"n_chars={len(prep_question)}, len_history={len(history)}, took={elapsed}ms"
-    )
-    return answer
+    elif question[0] == "/":
+        # this is a command, so the bot should
+        # strip it from the question before asking
+        _, _, question = question.partition(" ")
+        question = question.strip()
+
+    return question, is_follow_up
